@@ -22,7 +22,7 @@ public class ListDevices implements Discovery.Listener, Description.Listener {
         for (InetAddress inetAddress : localAddresses) {
             try {
                 System.out.println("Discovery on " + inetAddress.getHostAddress());
-                Discovery discovery = new Discovery(new InetSocketAddress(inetAddress, 2222));
+                Discovery discovery = new Discovery(new InetSocketAddress(inetAddress, 0));
                 discovery.addListener(this);
                 discovery.start();
                 discovery.sendSSDP(PRODUCT_NAME, PRODUCT_VERSION);

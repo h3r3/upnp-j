@@ -9,11 +9,10 @@ import org.postronic.h3.upnp.Device;
 import org.postronic.h3.upnp.Discovery;
 import org.postronic.h3.upnp.DiscoveryResponse;
 import org.postronic.h3.upnp.Service;
-import org.postronic.h3.upnp.Description.Listener;
 
 public class ListDevices implements Discovery.Listener, Description.Listener {
     
-    private static final String PRODUCT_NAME = "Test";
+    private static final String PRODUCT_NAME = "ListDevices Example";
     private static final String PRODUCT_VERSION = "1.0";
     
     public void run() throws Throwable {

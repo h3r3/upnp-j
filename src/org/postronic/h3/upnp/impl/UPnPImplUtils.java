@@ -1,6 +1,11 @@
 package org.postronic.h3.upnp.impl;
 
 import java.io.StringWriter;
+import java.net.Inet4Address;
+import java.net.Inet6Address;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
+import java.net.UnknownHostException;
 
 import javax.xml.transform.OutputKeys;
 import javax.xml.transform.Transformer;
@@ -62,6 +67,20 @@ public final class UPnPImplUtils {
             e.printStackTrace();
             return null;
         }
+    }
+    
+    public static InetSocketAddress getDiscoveryInetSocketAddress(InetAddress inetAddress) {
+        InetAddress discoveryInetAddress = null;
+        try {
+            if (inetAddress instanceof Inet4Address) {   
+                discoveryInetAddress = Inet4Address.getByName("239.255.255.250");
+            } else if (inetAddress instanceof Inet6Address) {
+                discoveryInetAddress = Inet6Address.getByName("FF02::C");
+            }
+        } catch (UnknownHostException e) {
+            throw new RuntimeException(e);
+        }
+        return new InetSocketAddress(discoveryInetAddress, 1900);
     }
 
 }

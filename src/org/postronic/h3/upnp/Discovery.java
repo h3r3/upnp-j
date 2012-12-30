@@ -7,13 +7,9 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
-import java.net.Inet4Address;
 import java.net.Inet6Address;
-import java.net.InetAddress;
 import java.net.InetSocketAddress;
-import java.net.MulticastSocket;
 import java.net.SocketAddress;
-import java.net.UnknownHostException;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -25,15 +21,12 @@ import org.postronic.h3.upnp.impl.UPnPImplUtils;
 public class Discovery {
     
     private static final int MAX_MESSAGE_SIZE = 1024 * 64;
-    private static final int DISCOVERY_PORT = 1900;
     
     private InetSocketAddress bindAddress;
-    private InetAddress discoveryAddress;
+    private InetSocketAddress discoveryAddress;
     private DatagramSocket socketUDP;
-    private MulticastSocket multicastSocket;
     private SocketUDPReceiverRunnable socketUDPReceiverRunnable;
-    private MulticastSocketReceiverRunnable multicastSocketReceiverRunnable;
-    private Thread socketUDPReceiverThread, multicastSocketReceiverThread;
+    private Thread socketUDPReceiverThread;
     private boolean running;
     private final List<Listener> listeners = new ArrayList<Listener>(); 
     
@@ -43,28 +36,15 @@ public class Discovery {
     
     public Discovery(InetSocketAddress bindAddress) {
         this.bindAddress = bindAddress;
-        try {
-            if (bindAddress.getAddress() instanceof Inet4Address) {   
-                discoveryAddress = Inet4Address.getByName("239.255.255.250");
-            } else if (bindAddress.getAddress() instanceof Inet6Address) {
-                discoveryAddress = Inet6Address.getByName("FF02::C");
-            }
-        } catch (UnknownHostException e) {
-            throw new RuntimeException(e);
-        }
+        this.discoveryAddress = UPnPImplUtils.getDiscoveryInetSocketAddress(bindAddress.getAddress());
     }
     
     public void start() throws IOException {
-        this.multicastSocket = new MulticastSocket(DISCOVERY_PORT);
-        this.multicastSocket.joinGroup(discoveryAddress);
         this.socketUDP = new DatagramSocket(null);
         this.socketUDP.bind(bindAddress);
         this.socketUDPReceiverRunnable = new SocketUDPReceiverRunnable();
         this.socketUDPReceiverThread = new Thread(socketUDPReceiverRunnable, "UPnP UDP receiver");
         this.socketUDPReceiverThread.start();
-        this.multicastSocketReceiverRunnable = new MulticastSocketReceiverRunnable();
-        this.multicastSocketReceiverThread = new Thread(multicastSocketReceiverRunnable, "UPnP Multicast receiver");
-        this.multicastSocketReceiverThread.start();
         running = true;
     }
     
@@ -79,10 +59,10 @@ public class Discovery {
     public void sendSSDP(String productName, String productVersion) throws IOException {
         ByteArrayOutputStream baos = null;
         try {
-            String discoveryAddr = discoveryAddress instanceof Inet6Address ? "[" + discoveryAddress.getHostAddress() + "]" : discoveryAddress.getHostAddress();  
+            String discoveryAddr = discoveryAddress.getAddress() instanceof Inet6Address ? "[" + discoveryAddress.getAddress().getHostAddress() + "]" : discoveryAddress.getAddress().getHostAddress();  
             baos = new ByteArrayOutputStream(512);            
             baos.write("M-SEARCH * HTTP/1.1\r\n".getBytes());
-            baos.write(("HOST: " + discoveryAddr + ":" + DISCOVERY_PORT + "\r\n").getBytes());
+            baos.write(("HOST: " + discoveryAddr + ":" + discoveryAddress.getPort() + "\r\n").getBytes());
             baos.write("MAN: \"ssdp:discover\"\r\n".getBytes());
             baos.write("MX: 3\r\n".getBytes());
             baos.write("ST: upnp:rootdevice\r\n".getBytes());
@@ -92,9 +72,8 @@ public class Discovery {
             baos.write("\r\n".getBytes());
             baos.flush();
             byte[] data = baos.toByteArray();
-            DatagramPacket packet = new DatagramPacket(data, data.length, new InetSocketAddress(discoveryAddress, DISCOVERY_PORT));
+            DatagramPacket packet = new DatagramPacket(data, data.length, discoveryAddress);
             this.socketUDP.send(packet);
-            this.multicastSocket.send(packet);
         } finally {
             if (baos != null) { try { baos.close(); } catch (Throwable e) { } }
         }
@@ -157,28 +136,6 @@ public class Discovery {
                         if (bais != null) { try { bais.close(); } catch (Throwable e) { } }
                         br = null; isr = null; bais = null;
                     }
-                }
-            } catch (Throwable e) {
-                e.printStackTrace();
-            }
-        }
-        
-    }
-    
-    private final class MulticastSocketReceiverRunnable implements Runnable {
-        
-        @Override
-        public void run() {
-            try {
-                byte[] buf = new byte[MAX_MESSAGE_SIZE];
-                DatagramPacket packet = new DatagramPacket(buf, MAX_MESSAGE_SIZE);
-                for (;;) {
-                    multicastSocket.receive(packet);
-                    SocketAddress senderAddress = packet.getSocketAddress();
-                    byte[] data = packet.getData();
-                    String res = new String(data).replaceAll("\\f", "");
-                    //System.out.println("-- MULTICAST from " + senderAddress);
-                    //System.out.println(res);
                 }
             } catch (Throwable e) {
                 e.printStackTrace();

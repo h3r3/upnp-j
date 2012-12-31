@@ -16,67 +16,130 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.postronic.h3.upnp.Description.Listener;
 import org.postronic.h3.upnp.impl.UPnPImplUtils;
 
 public class Discovery {
     
     private static final int MAX_MESSAGE_SIZE = 1024 * 64;
     
-    private InetSocketAddress bindAddress;
-    private InetSocketAddress discoveryAddress;
+    private enum Status {
+        READY, RUNNING, CLOSING, CLOSED
+    }
+    
+    private final InetSocketAddress bindInetSocketAddress;
+    private final InetSocketAddress discoveryInetSocketAddress;
+    private Status status = Status.READY;
+    private UserAgent userAgent = UPnPImplUtils.DEFAULT_USER_AGENT;
     private DatagramSocket socketUDP;
     private SocketUDPReceiverRunnable socketUDPReceiverRunnable;
-    private Thread socketUDPReceiverThread;
-    private boolean running;
-    private final List<Listener> listeners = new ArrayList<Listener>(); 
+    private Thread socketUDPReceiverThread, timeoutThread;
+    private int timeoutSeconds = 4;
+    private Callback callback; 
     
-    public interface Listener {
-        void onDiscoveryResponse(DiscoveryResponse discoveryResponse);
+    public interface Callback {
+        void onDiscoveryResponse(Discovery discovery, DiscoveryResponse discoveryResponse);
+        void onDiscoveryTerminated(Discovery discovery);
     }
     
-    public Discovery(InetSocketAddress bindAddress) {
-        this.bindAddress = bindAddress;
-        this.discoveryAddress = UPnPImplUtils.getDiscoveryInetSocketAddress(bindAddress.getAddress());
+    public Discovery(InetSocketAddress bindInetSocketAddress) {
+        this.bindInetSocketAddress = bindInetSocketAddress;
+        this.discoveryInetSocketAddress = UPnPImplUtils.getDiscoveryInetSocketAddress(bindInetSocketAddress.getAddress());
     }
     
-    public void start() throws IOException {
-        this.socketUDP = new DatagramSocket(null);
-        this.socketUDP.bind(bindAddress);
+    public InetSocketAddress getBindInetSocketAddress() {
+        return bindInetSocketAddress;
+    }
+    
+    public UserAgent getUserAgent() {
+        return userAgent;
+    }
+    
+    public int getTimeoutSeconds() {
+        return timeoutSeconds;
+    }
+    
+    public synchronized void setUserAgent(UserAgent userAgent) {
+        if (!Status.READY.equals(status)) throw new RuntimeException("Cannot configure Discovery UserAgent while in " + status + " status");
+        this.userAgent = userAgent;
+    }
+    
+    public synchronized void setTimeoutSeconds(int timeoutSeconds) {
+        if (!Status.READY.equals(status)) throw new RuntimeException("Cannot configure Discovery TimeoutSeconds while in " + status + " status");
+        this.timeoutSeconds = timeoutSeconds;
+    }
+    
+    public synchronized void start(Callback callback) throws IOException {
+        if (!Status.READY.equals(status)) throw new RuntimeException("Cannot start Discovery while in " + status + " status");
+        this.status = Status.RUNNING;
+        try {
+        this.callback = callback;
+        this.socketUDP = new DatagramSocket(bindInetSocketAddress);
         this.socketUDPReceiverRunnable = new SocketUDPReceiverRunnable();
         this.socketUDPReceiverThread = new Thread(socketUDPReceiverRunnable, "UPnP UDP receiver");
         this.socketUDPReceiverThread.start();
-        running = true;
+        timeoutThread = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    Thread.sleep(((long) timeoutSeconds) * 1000L);
+                } catch (Throwable e) {
+                    e.printStackTrace();
+                } finally {
+                    close();
+                }
+            }
+        }, "upnp-j DiscoveryTimeoutThread");
+        timeoutThread.setDaemon(false);
+        sendSSDP();
+        timeoutThread.start();
+        } catch (IOException e) {
+            close();
+            throw e;
+        } catch (RuntimeException e) {
+            close();
+            throw e;
+        }
     }
     
-    public synchronized boolean addListener(Listener listener) {
-        return listeners.add(listener);
-    }
-    
-    public synchronized boolean removeListener(Listener listener) {
-        return listeners.remove(listener);
-    }
-    
-    public void sendSSDP(String productName, String productVersion) throws IOException {
+    private void sendSSDP() throws IOException {
         ByteArrayOutputStream baos = null;
         try {
-            String discoveryAddr = discoveryAddress.getAddress() instanceof Inet6Address ? "[" + discoveryAddress.getAddress().getHostAddress() + "]" : discoveryAddress.getAddress().getHostAddress();  
+            String discoveryAddr = discoveryInetSocketAddress.getAddress() instanceof Inet6Address ? "[" + discoveryInetSocketAddress.getAddress().getHostAddress() + "]" : discoveryInetSocketAddress.getAddress().getHostAddress();  
             baos = new ByteArrayOutputStream(512);            
             baos.write("M-SEARCH * HTTP/1.1\r\n".getBytes());
-            baos.write(("HOST: " + discoveryAddr + ":" + discoveryAddress.getPort() + "\r\n").getBytes());
+            baos.write(("HOST: " + discoveryAddr + ":" + discoveryInetSocketAddress.getPort() + "\r\n").getBytes());
             baos.write("MAN: \"ssdp:discover\"\r\n".getBytes());
-            baos.write("MX: 3\r\n".getBytes());
+            baos.write(("MX: " + Math.max(1, timeoutSeconds - 1) + "\r\n").getBytes());
             baos.write("ST: upnp:rootdevice\r\n".getBytes());
-            if (productName != null && productVersion != null) {
-                baos.write(("USER-AGENT: " + UPnPImplUtils.getUserAgent(productName, productVersion) + "\r\n").getBytes());
+            UserAgent userAgent = this.userAgent;
+            if (userAgent != null) {
+                baos.write(("USER-AGENT: " + userAgent.toString() + "\r\n").getBytes());
             }
             baos.write("\r\n".getBytes());
             baos.flush();
             byte[] data = baos.toByteArray();
-            DatagramPacket packet = new DatagramPacket(data, data.length, discoveryAddress);
+            DatagramPacket packet = new DatagramPacket(data, data.length, discoveryInetSocketAddress);
             this.socketUDP.send(packet);
         } finally {
             if (baos != null) { try { baos.close(); } catch (Throwable e) { } }
         }
+    }
+    
+    public synchronized void abort() {
+        //FIXME Implement!
+    }
+    
+    private synchronized void close() {
+        status = Status.CLOSING;
+        if (socketUDP != null) { 
+            socketUDP.close();
+        } else {
+            status = Status.CLOSED;
+        }
+        try {
+            if (socketUDPReceiverThread != null) socketUDPReceiverThread.join(1000);
+        } catch (InterruptedException e) { }
     }
     
     private final class SocketUDPReceiverRunnable implements Runnable {
@@ -87,7 +150,17 @@ public class Discovery {
                 byte[] buf = new byte[MAX_MESSAGE_SIZE];
                 DatagramPacket packet = new DatagramPacket(buf, MAX_MESSAGE_SIZE);
                 for (;;) {
-                    socketUDP.receive(packet);
+                    try {
+                        socketUDP.receive(packet);
+                    } catch (Throwable e) {
+                        synchronized (Discovery.this) {
+                            if (!Status.CLOSING.equals(status)) {
+                                e.printStackTrace();                                
+                            }
+                            status = Status.CLOSED;
+                        }
+                        return;
+                    }
                     SocketAddress senderAddress = packet.getSocketAddress();
                     byte[] data = packet.getData();
                     
@@ -117,12 +190,10 @@ public class Discovery {
                             }
                         }
                         if (!responseHeaders.isEmpty()) {
-                            DiscoveryResponse discoveryResponse = new DiscoveryResponse(senderAddress, bindAddress, responseHeaders);
-                            List<Listener> listenersCopy = new ArrayList<Listener>();
-                            synchronized (this) { listenersCopy.addAll(listeners); }
-                            for (Listener listener : listenersCopy) {
+                            DiscoveryResponse discoveryResponse = new DiscoveryResponse(senderAddress, bindInetSocketAddress, responseHeaders);
+                            if (callback != null) {
                                 try {
-                                    listener.onDiscoveryResponse(discoveryResponse);
+                                    callback.onDiscoveryResponse(Discovery.this, discoveryResponse);
                                 } catch (Throwable e) {
                                     e.printStackTrace();
                                 }
@@ -139,6 +210,15 @@ public class Discovery {
                 }
             } catch (Throwable e) {
                 e.printStackTrace();
+            } finally {
+                socketUDP.close();
+                if (callback != null) {
+                    try {
+                        callback.onDiscoveryTerminated(Discovery.this);
+                    } catch (Throwable e) {
+                        e.printStackTrace();
+                    }
+                }
             }
         }
         

@@ -13,12 +13,15 @@ import javax.xml.transform.TransformerFactory;
 import javax.xml.transform.dom.DOMSource;
 import javax.xml.transform.stream.StreamResult;
 
+import org.postronic.h3.upnp.UserAgent;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 
 public final class UPnPImplUtils {
+    
+    public static final UserAgent DEFAULT_USER_AGENT = new UserAgent("upnp-j", "0.1"); 
     
     private UPnPImplUtils() { }
     
@@ -34,15 +37,6 @@ public final class UPnPImplUtils {
             }
         }
         return null;
-    }
-    
-    public static String getUserAgent(String productName, String productVersion) {
-        StringBuilder sb = new StringBuilder();
-        sb.append("USER-AGENT: ");
-        sb.append(System.getProperty("os.name").replace(" ", "-")).append("/").append(System.getProperty("os.version").replace(" ", "-"));
-        sb.append(" UPnP/1.1 ");
-        sb.append(productName.replace(" ", "-")).append("/").append(productVersion.replace(" ", "-"));
-        return sb.toString();
     }
     
     public static String extractURNShortName(String urn) {

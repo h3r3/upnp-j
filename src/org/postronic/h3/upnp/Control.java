@@ -20,12 +20,17 @@ import org.w3c.dom.NodeList;
 public class Control {
     
     private final Service service;
+    private UserAgent userAgent = UPnPImplUtils.DEFAULT_USER_AGENT;
     
     public Control(Service service) {
         this.service = service;
     }
     
-    public Map<String, String> sendSOAPRequest(String actionName, Map<String, String> inParams, String productName, String productVersion) {
+    public void setUserAgent(UserAgent userAgent) {
+        this.userAgent = userAgent;
+    }
+    
+    public Map<String, String> sendSOAPRequest(String actionName, Map<String, String> inParams) {
         URLConnection urlConnection = null;
         HttpURLConnection con = null;
         try {
@@ -55,7 +60,10 @@ public class Control {
                 con.setRequestProperty("HOST", controlURL.getHost() + (controlURLPort > 0 ? ":" + controlURLPort : ""));
                 con.setRequestProperty("CONTENT-LENGTH", Integer.toString(data.length));
                 con.setRequestProperty("CONTENT-TYPE", "text/xml; charset=\"utf-8\"");
-                con.setRequestProperty("USER-AGENT", UPnPImplUtils.getUserAgent(productName, productVersion));
+                UserAgent userAgent = this.userAgent;
+                if (userAgent != null) {
+                    con.setRequestProperty("USER-AGENT", userAgent.toString());
+                }
                 con.setRequestProperty("SOAPACTION", service.getServiceType() + "#" + actionName);
                 con.setUseCaches (false);
                 con.setDoInput(true);

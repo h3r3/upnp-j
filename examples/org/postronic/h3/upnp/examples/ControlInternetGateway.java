@@ -1,6 +1,5 @@
 package org.postronic.h3.upnp.examples;
 
-import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -12,27 +11,23 @@ import org.postronic.h3.upnp.Device;
 import org.postronic.h3.upnp.Discovery;
 import org.postronic.h3.upnp.DiscoveryResponse;
 import org.postronic.h3.upnp.Service;
-import org.postronic.h3.upnp.Description.Listener;
 import org.postronic.h3.upnp.impl.UPnPImplUtils;
 
 public class ControlInternetGateway {
     
-    private static final String PRODUCT_NAME = "Test";
-    private static final String PRODUCT_VERSION = "1.0";
-
     public static void main(String[] args) {
         try {
-            String hostName = InetAddress.getLocalHost().getHostName();
-            System.out.println(hostName);
-            InetAddress[] localAddresses = InetAddress.getAllByName(hostName);
-            for (InetAddress inetAddress : localAddresses) {
-                System.out.println(inetAddress.getHostAddress());
-            }
+//            String hostName = InetAddress.getLocalHost().getHostName();
+//            System.out.println(hostName);
+//            InetAddress[] localAddresses = InetAddress.getAllByName(hostName);
+//            for (InetAddress inetAddress : localAddresses) {
+//                System.out.println(inetAddress.getHostAddress());
+//            }
             
-            Discovery discovery = new Discovery(new InetSocketAddress("192.168.0.2", 2222));
-            discovery.addListener(new Discovery.Listener() {
+            Discovery discovery = new Discovery(new InetSocketAddress("192.168.0.14", 0));;
+            discovery.start(new Discovery.Callback() {
                 @Override
-                public void onDiscoveryResponse(DiscoveryResponse discoveryResponse) {
+                public void onDiscoveryResponse(Discovery discovery, DiscoveryResponse discoveryResponse) {
                     if ("upnp:rootdevice".equalsIgnoreCase(discoveryResponse.getSearchTarget())) {
                         System.out.println("Discovered: " + discoveryResponse.getLocation());
                         Description description = new Description(discoveryResponse.getLocation());
@@ -43,7 +38,7 @@ public class ControlInternetGateway {
                                 Service service = findWANIPConnectionService(device);
                                 if (service != null) {
                                     Control control = new Control(service);
-                                    Map<String, String> outParams = control.sendSOAPRequest("GetExternalIPAddress", null, PRODUCT_NAME, PRODUCT_VERSION);
+                                    Map<String, String> outParams = control.sendSOAPRequest("GetExternalIPAddress", null);
                                     System.out.println(outParams);
                                     
                                     Map<String, String> inParams2 = new LinkedHashMap<String, String>();
@@ -55,13 +50,13 @@ public class ControlInternetGateway {
                                     inParams2.put("NewEnabled", "1");
                                     inParams2.put("NewPortMappingDescription", "Just a test");
                                     inParams2.put("NewLeaseDuration", "10");
-                                    Map<String, String> outParams2 = control.sendSOAPRequest("AddPortMapping", inParams2, PRODUCT_NAME, PRODUCT_VERSION);
+                                    Map<String, String> outParams2 = control.sendSOAPRequest("AddPortMapping", inParams2);
                                     System.out.println(outParams2);
                                     
                                     for (int i = 0; i < 5; i++) {
                                         Map<String, String> inParams3 = new LinkedHashMap<String, String>();
                                         inParams3.put("NewPortMappingIndex", "" + i);
-                                        Map<String, String> outParams3 = control.sendSOAPRequest("GetGenericPortMappingEntry", inParams3, PRODUCT_NAME, PRODUCT_VERSION);
+                                        Map<String, String> outParams3 = control.sendSOAPRequest("GetGenericPortMappingEntry", inParams3);
                                         System.out.println(i + ": " + outParams3);
                                     }
                                     
@@ -101,11 +96,12 @@ public class ControlInternetGateway {
                         description.start();
                     }
                 }
+                @Override
+                public void onDiscoveryTerminated(Discovery discovery) {
+                    System.out.println("Discovery terminated");
+                }
             });
-            discovery.start();
             System.out.println("started");
-            discovery.sendSSDP(PRODUCT_NAME, PRODUCT_VERSION);
-            System.out.println("SSDP sent");
             Thread.sleep(10000);
         } catch (Throwable e) {
             e.printStackTrace();

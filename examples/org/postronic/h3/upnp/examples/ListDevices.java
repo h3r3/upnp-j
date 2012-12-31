@@ -9,37 +9,46 @@ import org.postronic.h3.upnp.Device;
 import org.postronic.h3.upnp.Discovery;
 import org.postronic.h3.upnp.DiscoveryResponse;
 import org.postronic.h3.upnp.Service;
+import org.postronic.h3.upnp.UserAgent;
 
-public class ListDevices implements Discovery.Listener, Description.Listener {
+public class ListDevices implements Discovery.Callback, Description.Listener {
     
-    private static final String PRODUCT_NAME = "ListDevices Example";
-    private static final String PRODUCT_VERSION = "1.0";
-    
-    public void run() throws Throwable {
-        String hostName = InetAddress.getLocalHost().getHostName();
-        System.out.println(hostName);
-        InetAddress[] localAddresses = InetAddress.getAllByName(hostName);
+    public void listDevices() throws Throwable {
+        UserAgent userAgent = new UserAgent("ListDevices Example", "1.0");
+        String canonicalHostName = InetAddress.getLocalHost().getCanonicalHostName();
+        InetAddress[] localAddresses = InetAddress.getAllByName(canonicalHostName);
         for (InetAddress inetAddress : localAddresses) {
             try {
-                System.out.println("Discovery on " + inetAddress.getHostAddress());
+                System.out.println("Starting discovery on " + inetAddress.getHostAddress());
                 Discovery discovery = new Discovery(new InetSocketAddress(inetAddress, 0));
-                discovery.addListener(this);
-                discovery.start();
-                discovery.sendSSDP(PRODUCT_NAME, PRODUCT_VERSION);
+                discovery.setUserAgent(userAgent);
+                discovery.setTimeoutSeconds(4);
+                discovery.start(this);
             } catch (Throwable e) {
                 e.printStackTrace();
             }
         }        
-        System.out.println("All discovery requests sent");
+        System.out.println("Discovery started on all local interfaces");
     }
     
     @Override
-    public void onDiscoveryResponse(DiscoveryResponse discoveryResponse) {
+    public void onDiscoveryResponse(Discovery discovery, DiscoveryResponse discoveryResponse) {
         if ("upnp:rootdevice".equalsIgnoreCase(discoveryResponse.getSearchTarget())) {
-            System.out.println("\nDiscovered: " + discoveryResponse.getLocation());
-            Description description = new Description(discoveryResponse.getLocation());
+            System.out.println("\nDiscovered: " + discoveryResponse.getLocation() + " on " + discovery.getBindInetSocketAddress());
+            final Description description = new Description(discoveryResponse.getLocation());
             description.addListener(this);
-            description.start();
+            Thread descThread = new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        description.start();
+                    } catch (Throwable e) {
+                        e.printStackTrace();
+                    }
+                }
+            }, "Description thread");
+            descThread.setDaemon(false);
+            descThread.start();
         }
     }
 
@@ -61,10 +70,14 @@ public class ListDevices implements Discovery.Listener, Description.Listener {
         }
     }
 
+    @Override
+    public void onDiscoveryTerminated(Discovery discovery) {
+        System.out.println("Discovery on " + discovery.getBindInetSocketAddress() + " terminated");
+    }
+    
     public static void main(String[] args) {
         try {
-            new ListDevices().run();
-            Thread.sleep(10000);
+            new ListDevices().listDevices();
         } catch (Throwable e) {
             e.printStackTrace();
         }

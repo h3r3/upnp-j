@@ -1,7 +1,9 @@
 package org.postronic.h3.upnp;
 
+import java.io.IOException;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
+import java.net.InetSocketAddress;
 import java.net.URL;
 import java.net.URLConnection;
 import java.nio.charset.Charset;
@@ -10,15 +12,39 @@ import java.util.Map;
 
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.parsers.ParserConfigurationException;
 
+import org.postronic.h3.upnp.Discovery.Callback;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
+import org.xml.sax.SAXException;
 
-public class Control {
+public class UPnPClient {
     
-    public static Map<String, String> sendSOAPRequest(Service service, UserAgent userAgent, String actionName, Map<String, String> inParams) {
+    public Discovery discover(InetSocketAddress bindInetSocketAddress, UserAgent userAgent, final int timeoutSeconds, Callback discoveryCallback) throws IOException {
+        Discovery discovery = new Discovery(bindInetSocketAddress);
+        discovery.start(userAgent, timeoutSeconds, discoveryCallback);
+        return discovery;
+    }
+    
+    public DescriptionResponse describe(URL descriptionURL) throws IOException, ParserConfigurationException, SAXException {
+        URLConnection urlConnection = descriptionURL.openConnection();
+        DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();
+        DocumentBuilder db = dbf.newDocumentBuilder();
+        Document doc = db.parse(urlConnection.getInputStream());
+        //System.out.println(Utils.getPrettyPrintXML(doc));
+        Element rootElem = doc.getDocumentElement();
+        if (rootElem != null && "root".equalsIgnoreCase(rootElem.getNodeName())) {
+            DescriptionResponse descriptionResponse = new DescriptionResponse(descriptionURL, doc);
+            return descriptionResponse;
+        } else {
+            return null;
+        }
+    }
+    
+    public Map<String, String> control(Service service, UserAgent userAgent, String actionName, Map<String, String> inParams) {
         URLConnection urlConnection = null;
         HttpURLConnection con = null;
         try {

@@ -5,16 +5,17 @@ import java.net.InetSocketAddress;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-import org.postronic.h3.upnp.Control;
-import org.postronic.h3.upnp.Description;
 import org.postronic.h3.upnp.DescriptionResponse;
 import org.postronic.h3.upnp.Device;
 import org.postronic.h3.upnp.Discovery;
 import org.postronic.h3.upnp.DiscoveryResponse;
 import org.postronic.h3.upnp.Service;
+import org.postronic.h3.upnp.UPnPClient;
 import org.postronic.h3.upnp.impl.UPnPImplUtils;
 
 public class ControlInternetGateway implements Discovery.Callback {
+    
+    private final UPnPClient uPnPClient = new UPnPClient();
     
     public void controlInternetGateway() throws IOException {
 //      String hostName = InetAddress.getLocalHost().getHostName();
@@ -23,8 +24,7 @@ public class ControlInternetGateway implements Discovery.Callback {
 //      for (InetAddress inetAddress : localAddresses) {
 //          System.out.println(inetAddress.getHostAddress());
 //      }
-      Discovery discovery = new Discovery(new InetSocketAddress("192.168.0.14", 0));;
-      discovery.start(this);
+        uPnPClient.discover(new InetSocketAddress("192.168.0.14", 0), UPnPImplUtils.DEFAULT_USER_AGENT, 4, this);
     }
 
     @Override
@@ -33,7 +33,7 @@ public class ControlInternetGateway implements Discovery.Callback {
             System.out.println("Discovered: " + discoveryResponse.getLocation());
             DescriptionResponse descriptionResponse = null;
             try {
-                descriptionResponse = Description.requestDescription(discoveryResponse.getLocation());
+                descriptionResponse = uPnPClient.describe(discoveryResponse.getLocation());
             } catch (Exception e) {
                 e.printStackTrace();
             }
@@ -41,7 +41,7 @@ public class ControlInternetGateway implements Discovery.Callback {
                 Device device = descriptionResponse.getDevice();
                 Service service = findWANIPConnectionService(device);
                 if (service != null) {
-                    Map<String, String> outParams = Control.sendSOAPRequest(service, UPnPImplUtils.DEFAULT_USER_AGENT, "GetExternalIPAddress", null);
+                    Map<String, String> outParams = uPnPClient.control(service, UPnPImplUtils.DEFAULT_USER_AGENT, "GetExternalIPAddress", null);
                     System.out.println(outParams);
                     
                     Map<String, String> inParams2 = new LinkedHashMap<String, String>();
@@ -53,13 +53,13 @@ public class ControlInternetGateway implements Discovery.Callback {
                     inParams2.put("NewEnabled", "1");
                     inParams2.put("NewPortMappingDescription", "Just a test");
                     inParams2.put("NewLeaseDuration", "10");
-                    Map<String, String> outParams2 = Control.sendSOAPRequest(service, UPnPImplUtils.DEFAULT_USER_AGENT, "AddPortMapping", inParams2);
+                    Map<String, String> outParams2 = uPnPClient.control(service, UPnPImplUtils.DEFAULT_USER_AGENT, "AddPortMapping", inParams2);
                     System.out.println(outParams2);
                     
                     for (int i = 0; i < 5; i++) {
                         Map<String, String> inParams3 = new LinkedHashMap<String, String>();
                         inParams3.put("NewPortMappingIndex", "" + i);
-                        Map<String, String> outParams3 = Control.sendSOAPRequest(service, UPnPImplUtils.DEFAULT_USER_AGENT, "GetGenericPortMappingEntry", inParams3);
+                        Map<String, String> outParams3 = uPnPClient.control(service, UPnPImplUtils.DEFAULT_USER_AGENT, "GetGenericPortMappingEntry", inParams3);
                         System.out.println(i + ": " + outParams3);
                     }
                     

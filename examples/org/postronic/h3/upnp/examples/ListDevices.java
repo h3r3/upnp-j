@@ -3,15 +3,17 @@ package org.postronic.h3.upnp.examples;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 
-import org.postronic.h3.upnp.Description;
 import org.postronic.h3.upnp.DescriptionResponse;
 import org.postronic.h3.upnp.Device;
 import org.postronic.h3.upnp.Discovery;
 import org.postronic.h3.upnp.DiscoveryResponse;
 import org.postronic.h3.upnp.Service;
+import org.postronic.h3.upnp.UPnPClient;
 import org.postronic.h3.upnp.UserAgent;
 
 public class ListDevices implements Discovery.Callback {
+    
+    private final UPnPClient uPnPClient = new UPnPClient();
     
     public void listDevices() throws Throwable {
         UserAgent userAgent = new UserAgent("ListDevices Example", "1.0");
@@ -20,10 +22,7 @@ public class ListDevices implements Discovery.Callback {
         for (InetAddress inetAddress : localAddresses) {
             try {
                 System.out.println("Starting discovery on " + inetAddress.getHostAddress());
-                Discovery discovery = new Discovery(new InetSocketAddress(inetAddress, 0));
-                discovery.setUserAgent(userAgent);
-                discovery.setTimeoutSeconds(4);
-                discovery.start(this);
+                Discovery discovery = uPnPClient.discover(new InetSocketAddress(inetAddress, 0), userAgent, 4, this);
             } catch (Throwable e) {
                 e.printStackTrace();
             }
@@ -39,7 +38,7 @@ public class ListDevices implements Discovery.Callback {
                 @Override
                 public void run() {
                     try {
-                        DescriptionResponse descriptionResponse = Description.requestDescription(discoveryResponse.getLocation());
+                        DescriptionResponse descriptionResponse = uPnPClient.describe(discoveryResponse.getLocation());
                         if (descriptionResponse != null) {
                             Device device = descriptionResponse.getDevice();
                             dumpDevice(0, device);
@@ -54,6 +53,11 @@ public class ListDevices implements Discovery.Callback {
         }
     }
     
+    @Override
+    public void onDiscoveryTerminated(Discovery discovery) {
+        System.out.println("Discovery on " + discovery.getBindInetSocketAddress() + " terminated");
+    }
+    
     private static void dumpDevice(int indent, Device device) {
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < indent; i++) { sb.append(" "); }
@@ -64,11 +68,6 @@ public class ListDevices implements Discovery.Callback {
         for (Device subDevice : device.getDeviceList()) {
             dumpDevice(indent + 1, subDevice);
         }
-    }
-
-    @Override
-    public void onDiscoveryTerminated(Discovery discovery) {
-        System.out.println("Discovery on " + discovery.getBindInetSocketAddress() + " terminated");
     }
     
     public static void main(String[] args) {

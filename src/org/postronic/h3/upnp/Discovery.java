@@ -48,25 +48,7 @@ public class Discovery {
         return bindInetSocketAddress;
     }
     
-    public UserAgent getUserAgent() {
-        return userAgent;
-    }
-    
-    public int getTimeoutSeconds() {
-        return timeoutSeconds;
-    }
-    
-    public synchronized void setUserAgent(UserAgent userAgent) {
-        if (!Status.READY.equals(status)) throw new RuntimeException("Cannot configure Discovery UserAgent while in " + status + " status");
-        this.userAgent = userAgent;
-    }
-    
-    public synchronized void setTimeoutSeconds(int timeoutSeconds) {
-        if (!Status.READY.equals(status)) throw new RuntimeException("Cannot configure Discovery TimeoutSeconds while in " + status + " status");
-        this.timeoutSeconds = timeoutSeconds;
-    }
-    
-    public synchronized void start(Callback discoveryCallback) throws IOException {
+    public synchronized void start(UserAgent userAgent, final int timeoutSeconds, Callback discoveryCallback) throws IOException {
         if (!Status.READY.equals(status)) throw new RuntimeException("Cannot start Discovery while in " + status + " status");
         this.status = Status.RUNNING;
         try {

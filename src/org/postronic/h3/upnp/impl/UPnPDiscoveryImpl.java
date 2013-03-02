@@ -107,15 +107,29 @@ public class UPnPDiscoveryImpl implements Future<List<UPnPDiscoveryData>> {
     }
     
     private synchronized void close() {
-        status = Status.CLOSING;
-        if (socketUDP != null) { 
-            socketUDP.close();
-        } else {
+        switch (status) {
+        case READY:
             status = Status.CLOSED;
+            break;
+        case RUNNING:
+            status = Status.CLOSING;
+            if (socketUDP != null) { 
+                socketUDP.close();
+            } else {
+                status = Status.CLOSED;
+            }
+            try {
+                if (socketUDPReceiverThread != null) socketUDPReceiverThread.join(1000);
+            } catch (InterruptedException e) { }
+            break;
+        case CLOSING:
+            try {
+                if (socketUDPReceiverThread != null) socketUDPReceiverThread.join(1000);
+            } catch (InterruptedException e) { }
+            break;
+        case CLOSED:
+            break; 
         }
-        try {
-            if (socketUDPReceiverThread != null) socketUDPReceiverThread.join(1000);
-        } catch (InterruptedException e) { }
     }
     
     private final class SocketUDPReceiverRunnable implements Runnable {
@@ -207,8 +221,9 @@ public class UPnPDiscoveryImpl implements Future<List<UPnPDiscoveryData>> {
 
     @Override
     public boolean isDone() {
-        // TODO Auto-generated method stub
-        return false;
+        synchronized (this) {
+            return Status.CLOSED.equals(status);
+        }
     }
 
     @Override
@@ -218,8 +233,7 @@ public class UPnPDiscoveryImpl implements Future<List<UPnPDiscoveryData>> {
     }
 
     @Override
-    public List<UPnPDiscoveryData> get(long timeout, TimeUnit unit)
-            throws InterruptedException, ExecutionException, TimeoutException {
+    public List<UPnPDiscoveryData> get(long timeout, TimeUnit unit) throws InterruptedException, ExecutionException, TimeoutException {
         // TODO Auto-generated method stub
         return null;
     }

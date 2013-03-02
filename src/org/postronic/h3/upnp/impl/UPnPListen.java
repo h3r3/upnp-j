@@ -6,7 +6,9 @@ import java.net.InetSocketAddress;
 import java.net.MulticastSocket;
 import java.net.SocketAddress;
 
-
+/**
+ * This class is not really needed, it can be used to take a look at the UDP multicast messages in your LAN.
+ */
 public class UPnPListen {
     
     private static final int MAX_MESSAGE_SIZE = 1024 * 64;

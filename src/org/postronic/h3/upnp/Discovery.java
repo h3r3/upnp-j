@@ -11,12 +11,9 @@ import java.net.Inet6Address;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.nio.charset.Charset;
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 
-import org.postronic.h3.upnp.Description.Listener;
 import org.postronic.h3.upnp.impl.UPnPImplUtils;
 
 public class Discovery {
@@ -69,11 +66,11 @@ public class Discovery {
         this.timeoutSeconds = timeoutSeconds;
     }
     
-    public synchronized void start(Callback callback) throws IOException {
+    public synchronized void start(Callback discoveryCallback) throws IOException {
         if (!Status.READY.equals(status)) throw new RuntimeException("Cannot start Discovery while in " + status + " status");
         this.status = Status.RUNNING;
         try {
-        this.callback = callback;
+        this.callback = discoveryCallback;
         this.socketUDP = new DatagramSocket(bindInetSocketAddress);
         this.socketUDPReceiverRunnable = new SocketUDPReceiverRunnable();
         this.socketUDPReceiverThread = new Thread(socketUDPReceiverRunnable, "UPnP UDP receiver");

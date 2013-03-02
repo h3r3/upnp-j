@@ -11,7 +11,7 @@ import org.postronic.h3.upnp.DiscoveryResponse;
 import org.postronic.h3.upnp.Service;
 import org.postronic.h3.upnp.UserAgent;
 
-public class ListDevices implements Discovery.Callback, Description.Listener {
+public class ListDevices implements Discovery.Callback {
     
     public void listDevices() throws Throwable {
         UserAgent userAgent = new UserAgent("ListDevices Example", "1.0");
@@ -32,16 +32,18 @@ public class ListDevices implements Discovery.Callback, Description.Listener {
     }
     
     @Override
-    public void onDiscoveryResponse(Discovery discovery, DiscoveryResponse discoveryResponse) {
+    public void onDiscoveryResponse(Discovery discovery, final DiscoveryResponse discoveryResponse) {
         if ("upnp:rootdevice".equalsIgnoreCase(discoveryResponse.getSearchTarget())) {
             System.out.println("\nDiscovered: " + discoveryResponse.getLocation() + " on " + discovery.getBindInetSocketAddress());
-            final Description description = new Description(discoveryResponse.getLocation());
-            description.addListener(this);
             Thread descThread = new Thread(new Runnable() {
                 @Override
                 public void run() {
                     try {
-                        description.start();
+                        DescriptionResponse descriptionResponse = Description.requestDescription(discoveryResponse.getLocation());
+                        if (descriptionResponse != null) {
+                            Device device = descriptionResponse.getDevice();
+                            dumpDevice(0, device);
+                        }
                     } catch (Throwable e) {
                         e.printStackTrace();
                     }
@@ -50,12 +52,6 @@ public class ListDevices implements Discovery.Callback, Description.Listener {
             descThread.setDaemon(false);
             descThread.start();
         }
-    }
-
-    @Override
-    public void onDescriptionResponse(DescriptionResponse res) {
-        Device device = res.getDevice();
-        dumpDevice(0, device);
     }
     
     private static void dumpDevice(int indent, Device device) {

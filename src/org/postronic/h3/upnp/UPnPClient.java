@@ -8,13 +8,16 @@ import java.net.URL;
 import java.net.URLConnection;
 import java.nio.charset.Charset;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Future;
 
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.parsers.ParserConfigurationException;
 
-import org.postronic.h3.upnp.Discovery.Callback;
+import org.postronic.h3.upnp.impl.UPnPDiscoveryImpl;
+import org.postronic.h3.upnp.impl.UPnPDiscoveryImpl.Callback;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.Node;
@@ -23,13 +26,13 @@ import org.xml.sax.SAXException;
 
 public class UPnPClient {
     
-    public Discovery discover(InetSocketAddress bindInetSocketAddress, UserAgent userAgent, final int timeoutSeconds, Callback discoveryCallback) throws IOException {
-        Discovery discovery = new Discovery(bindInetSocketAddress);
+    public Future<List<UPnPDiscoveryData>> discover(InetSocketAddress bindInetSocketAddress, UPnPUserAgent userAgent, final int timeoutSeconds, Callback discoveryCallback) throws IOException {
+        UPnPDiscoveryImpl discovery = new UPnPDiscoveryImpl(bindInetSocketAddress);
         discovery.start(userAgent, timeoutSeconds, discoveryCallback);
         return discovery;
     }
     
-    public DescriptionResponse describe(URL descriptionURL) throws IOException, ParserConfigurationException, SAXException {
+    public UPnPDescriptionData describe(URL descriptionURL) throws IOException, ParserConfigurationException, SAXException {
         URLConnection urlConnection = descriptionURL.openConnection();
         DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();
         DocumentBuilder db = dbf.newDocumentBuilder();
@@ -37,14 +40,14 @@ public class UPnPClient {
         //System.out.println(Utils.getPrettyPrintXML(doc));
         Element rootElem = doc.getDocumentElement();
         if (rootElem != null && "root".equalsIgnoreCase(rootElem.getNodeName())) {
-            DescriptionResponse descriptionResponse = new DescriptionResponse(descriptionURL, doc);
+            UPnPDescriptionData descriptionResponse = new UPnPDescriptionData(descriptionURL, doc);
             return descriptionResponse;
         } else {
             return null;
         }
     }
     
-    public Map<String, String> control(Service service, UserAgent userAgent, String actionName, Map<String, String> inParams) {
+    public Map<String, String> control(UPnPServiceData service, UPnPUserAgent userAgent, String actionName, Map<String, String> inParams) {
         URLConnection urlConnection = null;
         HttpURLConnection con = null;
         try {

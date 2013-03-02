@@ -2,27 +2,29 @@ package org.postronic.h3.upnp.examples;
 
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.util.List;
+import java.util.concurrent.Future;
 
-import org.postronic.h3.upnp.DescriptionResponse;
-import org.postronic.h3.upnp.Device;
-import org.postronic.h3.upnp.Discovery;
-import org.postronic.h3.upnp.DiscoveryResponse;
-import org.postronic.h3.upnp.Service;
+import org.postronic.h3.upnp.UPnPDescriptionData;
+import org.postronic.h3.upnp.UPnPDeviceData;
+import org.postronic.h3.upnp.UPnPDiscoveryData;
+import org.postronic.h3.upnp.UPnPServiceData;
 import org.postronic.h3.upnp.UPnPClient;
-import org.postronic.h3.upnp.UserAgent;
+import org.postronic.h3.upnp.UPnPUserAgent;
+import org.postronic.h3.upnp.impl.UPnPDiscoveryImpl;
 
-public class ListDevices implements Discovery.Callback {
+public class ListDevices implements UPnPDiscoveryImpl.Callback {
     
     private final UPnPClient uPnPClient = new UPnPClient();
     
     public void listDevices() throws Throwable {
-        UserAgent userAgent = new UserAgent("ListDevices Example", "1.0");
+        UPnPUserAgent userAgent = new UPnPUserAgent("ListDevices Example", "1.0");
         String canonicalHostName = InetAddress.getLocalHost().getCanonicalHostName();
         InetAddress[] localAddresses = InetAddress.getAllByName(canonicalHostName);
         for (InetAddress inetAddress : localAddresses) {
             try {
                 System.out.println("Starting discovery on " + inetAddress.getHostAddress());
-                Discovery discovery = uPnPClient.discover(new InetSocketAddress(inetAddress, 0), userAgent, 4, this);
+                Future<List<UPnPDiscoveryData>> discovery = uPnPClient.discover(new InetSocketAddress(inetAddress, 0), userAgent, 4, this);
             } catch (Throwable e) {
                 e.printStackTrace();
             }
@@ -31,16 +33,16 @@ public class ListDevices implements Discovery.Callback {
     }
     
     @Override
-    public void onDiscoveryResponse(Discovery discovery, final DiscoveryResponse discoveryResponse) {
+    public void onDiscoveryResponse(final UPnPDiscoveryData discoveryResponse) {
         if ("upnp:rootdevice".equalsIgnoreCase(discoveryResponse.getSearchTarget())) {
-            System.out.println("\nDiscovered: " + discoveryResponse.getLocation() + " on " + discovery.getBindInetSocketAddress());
+            System.out.println("\nDiscovered: " + discoveryResponse.getLocation() + " on " + discoveryResponse.getReceiverAddress());
             Thread descThread = new Thread(new Runnable() {
                 @Override
                 public void run() {
                     try {
-                        DescriptionResponse descriptionResponse = uPnPClient.describe(discoveryResponse.getLocation());
+                        UPnPDescriptionData descriptionResponse = uPnPClient.describe(discoveryResponse.getLocation());
                         if (descriptionResponse != null) {
-                            Device device = descriptionResponse.getDevice();
+                            UPnPDeviceData device = descriptionResponse.getDevice();
                             dumpDevice(0, device);
                         }
                     } catch (Throwable e) {
@@ -53,19 +55,14 @@ public class ListDevices implements Discovery.Callback {
         }
     }
     
-    @Override
-    public void onDiscoveryTerminated(Discovery discovery) {
-        System.out.println("Discovery on " + discovery.getBindInetSocketAddress() + " terminated");
-    }
-    
-    private static void dumpDevice(int indent, Device device) {
+    private static void dumpDevice(int indent, UPnPDeviceData device) {
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < indent; i++) { sb.append(" "); }
         System.out.println(sb.toString() + device.getDeviceType() + " " + device.getFriendlyName());
-        for (Service service : device.getServiceList()) {
+        for (UPnPServiceData service : device.getServiceList()) {
             System.out.println(sb.toString() + service.getServiceType() + " " + service.getControlURL());
         }
-        for (Device subDevice : device.getDeviceList()) {
+        for (UPnPDeviceData subDevice : device.getDeviceList()) {
             dumpDevice(indent + 1, subDevice);
         }
     }

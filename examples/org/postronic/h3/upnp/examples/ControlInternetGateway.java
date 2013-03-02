@@ -5,15 +5,15 @@ import java.net.InetSocketAddress;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-import org.postronic.h3.upnp.DescriptionResponse;
-import org.postronic.h3.upnp.Device;
-import org.postronic.h3.upnp.Discovery;
-import org.postronic.h3.upnp.DiscoveryResponse;
-import org.postronic.h3.upnp.Service;
+import org.postronic.h3.upnp.UPnPDescriptionData;
+import org.postronic.h3.upnp.UPnPDeviceData;
+import org.postronic.h3.upnp.UPnPDiscoveryData;
+import org.postronic.h3.upnp.UPnPServiceData;
 import org.postronic.h3.upnp.UPnPClient;
+import org.postronic.h3.upnp.impl.UPnPDiscoveryImpl;
 import org.postronic.h3.upnp.impl.UPnPImplUtils;
 
-public class ControlInternetGateway implements Discovery.Callback {
+public class ControlInternetGateway implements UPnPDiscoveryImpl.Callback {
     
     private final UPnPClient uPnPClient = new UPnPClient();
     
@@ -28,18 +28,18 @@ public class ControlInternetGateway implements Discovery.Callback {
     }
 
     @Override
-    public void onDiscoveryResponse(Discovery discovery, DiscoveryResponse discoveryResponse) {
+    public void onDiscoveryResponse(UPnPDiscoveryData discoveryResponse) {
         if ("upnp:rootdevice".equalsIgnoreCase(discoveryResponse.getSearchTarget())) {
             System.out.println("Discovered: " + discoveryResponse.getLocation());
-            DescriptionResponse descriptionResponse = null;
+            UPnPDescriptionData descriptionResponse = null;
             try {
                 descriptionResponse = uPnPClient.describe(discoveryResponse.getLocation());
             } catch (Exception e) {
                 e.printStackTrace();
             }
             if (descriptionResponse != null) {
-                Device device = descriptionResponse.getDevice();
-                Service service = findWANIPConnectionService(device);
+                UPnPDeviceData device = descriptionResponse.getDevice();
+                UPnPServiceData service = findWANIPConnectionService(device);
                 if (service != null) {
                     Map<String, String> outParams = uPnPClient.control(service, UPnPImplUtils.DEFAULT_USER_AGENT, "GetExternalIPAddress", null);
                     System.out.println(outParams);
@@ -69,18 +69,13 @@ public class ControlInternetGateway implements Discovery.Callback {
         }
     }
     
-    @Override
-    public void onDiscoveryTerminated(Discovery discovery) {
-        System.out.println("Discovery terminated");
-    }
-    
-    private Service findWANIPConnectionService(Device device) {
+    private UPnPServiceData findWANIPConnectionService(UPnPDeviceData device) {
         if ("InternetGatewayDevice".equalsIgnoreCase(UPnPImplUtils.extractURNShortName(device.getDeviceType()))) {
-            for (Device subDevice1 : device.getDeviceList()) {
+            for (UPnPDeviceData subDevice1 : device.getDeviceList()) {
                 if ("WANDevice".equalsIgnoreCase(UPnPImplUtils.extractURNShortName(subDevice1.getDeviceType()))) {
-                    for (Device subDevice2 : subDevice1.getDeviceList()) {
+                    for (UPnPDeviceData subDevice2 : subDevice1.getDeviceList()) {
                         if ("WANConnectionDevice".equalsIgnoreCase(UPnPImplUtils.extractURNShortName(subDevice2.getDeviceType()))) {
-                            for (Service service : subDevice2.getServiceList()) {
+                            for (UPnPServiceData service : subDevice2.getServiceList()) {
                                 if ("WANIPConnection".equalsIgnoreCase(UPnPImplUtils.extractURNShortName(service.getServiceType()))) {
                                     return service;
                                 }
@@ -93,14 +88,14 @@ public class ControlInternetGateway implements Discovery.Callback {
         return null;
     }
     
-    private void dumpDevice(int indent, Device device) {
+    private void dumpDevice(int indent, UPnPDeviceData device) {
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < indent; i++) { sb.append(" "); }
         System.out.println(sb.toString() + device.getDeviceType() + " " + device.getFriendlyName());
-        for (Service service : device.getServiceList()) {
+        for (UPnPServiceData service : device.getServiceList()) {
             System.out.println(sb.toString() + service.getServiceType() + " " + service.getControlURL());
         }
-        for (Device subDevice : device.getDeviceList()) {
+        for (UPnPDeviceData subDevice : device.getDeviceList()) {
             dumpDevice(indent + 1, subDevice);
         }
     }

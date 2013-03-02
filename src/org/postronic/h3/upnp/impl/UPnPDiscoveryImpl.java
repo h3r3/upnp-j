@@ -1,4 +1,4 @@
-package org.postronic.h3.upnp;
+package org.postronic.h3.upnp.impl;
 
 import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
@@ -12,11 +12,17 @@ import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.nio.charset.Charset;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
-import org.postronic.h3.upnp.impl.UPnPImplUtils;
+import org.postronic.h3.upnp.UPnPDiscoveryData;
+import org.postronic.h3.upnp.UPnPUserAgent;
 
-public class Discovery {
+public class UPnPDiscoveryImpl implements Future<List<UPnPDiscoveryData>> {
     
     private static final int MAX_MESSAGE_SIZE = 1024 * 64;
     
@@ -27,7 +33,7 @@ public class Discovery {
     private final InetSocketAddress bindInetSocketAddress;
     private final InetSocketAddress discoveryInetSocketAddress;
     private Status status = Status.READY;
-    private UserAgent userAgent = UPnPImplUtils.DEFAULT_USER_AGENT;
+    private UPnPUserAgent userAgent = UPnPImplUtils.DEFAULT_USER_AGENT;
     private DatagramSocket socketUDP;
     private SocketUDPReceiverRunnable socketUDPReceiverRunnable;
     private Thread socketUDPReceiverThread, timeoutThread;
@@ -35,43 +41,38 @@ public class Discovery {
     private Callback callback; 
     
     public interface Callback {
-        void onDiscoveryResponse(Discovery discovery, DiscoveryResponse discoveryResponse);
-        void onDiscoveryTerminated(Discovery discovery);
+        void onDiscoveryResponse(UPnPDiscoveryData discoveryResponse);
     }
     
-    public Discovery(InetSocketAddress bindInetSocketAddress) {
+    public UPnPDiscoveryImpl(InetSocketAddress bindInetSocketAddress) {
         this.bindInetSocketAddress = bindInetSocketAddress;
         this.discoveryInetSocketAddress = UPnPImplUtils.getDiscoveryInetSocketAddress(bindInetSocketAddress.getAddress());
     }
     
-    public InetSocketAddress getBindInetSocketAddress() {
-        return bindInetSocketAddress;
-    }
-    
-    public synchronized void start(UserAgent userAgent, final int timeoutSeconds, Callback discoveryCallback) throws IOException {
+    public synchronized void start(UPnPUserAgent userAgent, final int timeoutSeconds, Callback discoveryCallback) throws IOException {
         if (!Status.READY.equals(status)) throw new RuntimeException("Cannot start Discovery while in " + status + " status");
         this.status = Status.RUNNING;
         try {
-        this.callback = discoveryCallback;
-        this.socketUDP = new DatagramSocket(bindInetSocketAddress);
-        this.socketUDPReceiverRunnable = new SocketUDPReceiverRunnable();
-        this.socketUDPReceiverThread = new Thread(socketUDPReceiverRunnable, "UPnP UDP receiver");
-        this.socketUDPReceiverThread.start();
-        timeoutThread = new Thread(new Runnable() {
-            @Override
-            public void run() {
-                try {
-                    Thread.sleep(((long) timeoutSeconds) * 1000L);
-                } catch (Throwable e) {
-                    e.printStackTrace();
-                } finally {
-                    close();
+            this.callback = discoveryCallback;
+            this.socketUDP = new DatagramSocket(bindInetSocketAddress);
+            this.socketUDPReceiverRunnable = new SocketUDPReceiverRunnable();
+            this.socketUDPReceiverThread = new Thread(socketUDPReceiverRunnable, "UPnP UDP receiver");
+            this.socketUDPReceiverThread.start();
+            timeoutThread = new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        Thread.sleep(((long) timeoutSeconds) * 1000L);
+                    } catch (Throwable e) {
+                        e.printStackTrace();
+                    } finally {
+                        close();
+                    }
                 }
-            }
-        }, "upnp-j DiscoveryTimeoutThread");
-        timeoutThread.setDaemon(false);
-        sendSSDP();
-        timeoutThread.start();
+            }, "upnp-j DiscoveryTimeoutThread");
+            timeoutThread.setDaemon(false);
+            sendSSDP();
+            timeoutThread.start();
         } catch (IOException e) {
             close();
             throw e;
@@ -91,7 +92,7 @@ public class Discovery {
             baos.write("MAN: \"ssdp:discover\"\r\n".getBytes());
             baos.write(("MX: " + Math.max(1, timeoutSeconds - 1) + "\r\n").getBytes());
             baos.write("ST: upnp:rootdevice\r\n".getBytes());
-            UserAgent userAgent = this.userAgent;
+            UPnPUserAgent userAgent = this.userAgent;
             if (userAgent != null) {
                 baos.write(("USER-AGENT: " + userAgent.toString() + "\r\n").getBytes());
             }
@@ -103,10 +104,6 @@ public class Discovery {
         } finally {
             if (baos != null) { try { baos.close(); } catch (Throwable e) { } }
         }
-    }
-    
-    public synchronized void abort() {
-        //FIXME Implement!
     }
     
     private synchronized void close() {
@@ -132,7 +129,7 @@ public class Discovery {
                     try {
                         socketUDP.receive(packet);
                     } catch (Throwable e) {
-                        synchronized (Discovery.this) {
+                        synchronized (UPnPDiscoveryImpl.this) {
                             if (!Status.CLOSING.equals(status)) {
                                 e.printStackTrace();                                
                             }
@@ -169,10 +166,10 @@ public class Discovery {
                             }
                         }
                         if (!responseHeaders.isEmpty()) {
-                            DiscoveryResponse discoveryResponse = new DiscoveryResponse(senderAddress, bindInetSocketAddress, responseHeaders);
+                            UPnPDiscoveryData discoveryResponse = new UPnPDiscoveryData(senderAddress, bindInetSocketAddress, responseHeaders);
                             if (callback != null) {
                                 try {
-                                    callback.onDiscoveryResponse(Discovery.this, discoveryResponse);
+                                    callback.onDiscoveryResponse(discoveryResponse);
                                 } catch (Throwable e) {
                                     e.printStackTrace();
                                 }
@@ -191,16 +188,40 @@ public class Discovery {
                 e.printStackTrace();
             } finally {
                 socketUDP.close();
-                if (callback != null) {
-                    try {
-                        callback.onDiscoveryTerminated(Discovery.this);
-                    } catch (Throwable e) {
-                        e.printStackTrace();
-                    }
-                }
             }
         }
         
+    }
+
+    @Override
+    public boolean cancel(boolean mayInterruptIfRunning) {
+        // TODO Auto-generated method stub
+        return false;
+    }
+
+    @Override
+    public boolean isCancelled() {
+        // TODO Auto-generated method stub
+        return false;
+    }
+
+    @Override
+    public boolean isDone() {
+        // TODO Auto-generated method stub
+        return false;
+    }
+
+    @Override
+    public List<UPnPDiscoveryData> get() throws InterruptedException, ExecutionException {
+        // TODO Auto-generated method stub
+        return null;
+    }
+
+    @Override
+    public List<UPnPDiscoveryData> get(long timeout, TimeUnit unit)
+            throws InterruptedException, ExecutionException, TimeoutException {
+        // TODO Auto-generated method stub
+        return null;
     }
     
 }

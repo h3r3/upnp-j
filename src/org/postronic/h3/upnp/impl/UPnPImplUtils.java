@@ -13,7 +13,7 @@ import javax.xml.transform.TransformerFactory;
 import javax.xml.transform.dom.DOMSource;
 import javax.xml.transform.stream.StreamResult;
 
-import org.postronic.h3.upnp.UserAgent;
+import org.postronic.h3.upnp.UPnPUserAgent;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.Node;
@@ -21,7 +21,7 @@ import org.w3c.dom.NodeList;
 
 public final class UPnPImplUtils {
     
-    public static final UserAgent DEFAULT_USER_AGENT = new UserAgent("upnp-j", "0.1"); 
+    public static final UPnPUserAgent DEFAULT_USER_AGENT = new UPnPUserAgent("upnp-j", "0.1"); 
     
     private UPnPImplUtils() { }
     

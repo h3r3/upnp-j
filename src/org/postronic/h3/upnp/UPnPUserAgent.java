@@ -1,19 +1,19 @@
 package org.postronic.h3.upnp;
 
 
-public class UserAgent {
+public class UPnPUserAgent {
     
     private final String osName, osVersion, productName, productVersion;
     
-    public UserAgent(String osName, String osVersion, String productName, String productVersion) {
+    public UPnPUserAgent(String productName, String productVersion) {
+        this(productName, productVersion, System.getProperty("os.name"), System.getProperty("os.version"));
+    }
+    
+    public UPnPUserAgent(String productName, String productVersion, String osName, String osVersion) {
         this.osName = osName;
         this.osVersion = osVersion;
         this.productName = productName;
         this.productVersion = productVersion;
-    }
-
-    public UserAgent(String productName, String productVersion) {
-        this (System.getProperty("os.name"), System.getProperty("os.version"), productName, productVersion);
     }
     
     public String getOsName() {
